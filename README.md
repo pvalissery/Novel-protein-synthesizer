@@ -1,5 +1,7 @@
 # Random protein synthesizer
 
+[Click here](https://pvalissery.github.io/Novel-protein-synthesizer/)
+
 This simulator demonstrates how emergent complexity arises from bare-bones biological rules. By stripping the standard four-letter genetic alphabet down to just two nucleotides, this mini-simulation acts as a sandbox for prebiotic RNA-world scenarios.
 It calculates the 8 possible 3-letter codons that can exist in a 2-base environment and maps them to a drastically reduced amino acid pool. While you won't be building highly specific catalytic enzymes with this limited toolkit, the tool shows exactly what kind of primitive, repetitive peptides can be generated from a minimalist genetic code.
 
