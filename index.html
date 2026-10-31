@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2-Nucleotide Protein Generator</title>
+    <style>
+        :root {
+            --bg: #f4f4f9;
+            --text: #333;
+            --accent: #2563eb;
+            --border: #ccc;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            line-height: 1.5;
+        }
+        .card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 1.5rem;
+        }
+        .control-group {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        label { font-weight: bold; min-width: 150px; }
+        select, input[type="range"] { flex: 1; padding: 0.5rem; }
+        .value-display { min-width: 30px; text-align: right; font-weight: bold; }
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            margin-right: 1rem;
+        }
+        button:hover { opacity: 0.9; }
+        .output-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .codon-box {
+            background: #e0e7ff;
+            border: 1px solid #c7d2fe;
+            padding: 0.5rem;
+            text-align: center;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .sequence-list {
+            font-family: monospace;
+            background: #1e293b;
+            color: #10b981;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>2-Nucleotide Translation Simulator</h2>
+
+    <div class="card">
+        <div class="control-group">
+            <label>Nucleotide 1 (Purine):</label>
+            <select id="base1">
+                <option value="A">Adenine (A)</option>
+                <option value="G">Guanine (G)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Nucleotide 2 (Pyrimidine):</label>
+            <select id="base2">
+                <option value="T">Thymine (T)</option>
+                <option value="C">Cytosine (C)</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Render Count:</label>
+            <input type="range" id="proteinCount" min="1" max="20" value="5">
+            <span class="value-display" id="countVal">5</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Protein Length (AA):</label>
+            <input type="range" id="proteinLength" min="2" max="20" value="10">
+            <span class="value-display" id="lengthVal">10</span>
+        </div>
+
+        <button onclick="runSimulation()">Generate</button>
+        <button onclick="downloadFASTA()" style="background-color: #059669;">Download FASTA</button>
+    </div>
+
+    <div class="card" id="codon-section" style="display: none;">
+        <h3>Possible Codons & Amino Acids</h3>
+        <div class="output-grid" id="codonGrid"></div>
+    </div>
+
+    <div class="card" id="protein-section" style="display: none;">
+        <h3>Generated Proteins (Screen Render)</h3>
+        <div class="sequence-list" id="proteinList"></div>
+    </div>
+
+    <script>
+        // Standard Genetic Code 
+        const codonTable = {
+            'TTT':'F', 'TTC':'F', 'TTA':'L', 'TTG':'L',
+            'CTT':'L', 'CTC':'L', 'CTA':'L', 'CTG':'L',
+            'ATT':'I', 'ATC':'I', 'ATA':'I', 'ATG':'M',
+            'GTT':'V', 'GTC':'V', 'GTA':'V', 'GTG':'V',
+            'TCT':'S', 'TCC':'S', 'TCA':'S', 'TCG':'S',
+            'CCT':'P', 'CCC':'P', 'CCA':'P', 'CCG':'P',
+            'ACT':'T', 'ACC':'T', 'ACA':'T', 'ACG':'T',
+            'GCT':'A', 'GCC':'A', 'GCA':'A', 'GCG':'A',
+            'TAT':'Y', 'TAC':'Y', 'TAA':'*', 'TAG':'*',
+            'CAT':'H', 'CAC':'H', 'CAA':'Q', 'CAG':'Q',
+            'AAT':'N', 'AAC':'N', 'AAA':'K', 'AAG':'K',
+            'GAT':'D', 'GAC':'D', 'GAA':'E', 'GAG':'E',
+            'TGT':'C', 'TGC':'C', 'TGA':'*', 'TGG':'W',
+            'CGT':'R', 'CGC':'R', 'CGA':'R', 'CGG':'R',
+            'AGT':'S', 'AGC':'S', 'AGA':'R', 'AGG':'R',
+            'GGT':'G', 'GGC':'G', 'GGA':'G', 'GGG':'G'
+        };
+
+        let currentAvailableAAs = [];
+        let generatedFASTAData = "";
+
+        // Update slider values on screen
+        document.getElementById('proteinCount').addEventListener('input', (e) => {
+            document.getElementById('countVal').innerText = e.target.value;
+        });
+        document.getElementById('proteinLength').addEventListener('input', (e) => {
+            document.getElementById('lengthVal').innerText = e.target.value;
+        });
+
+        function runSimulation() {
+            const b1 = document.getElementById('base1').value;
+            const b2 = document.getElementById('base2').value;
+            const bases = [b1, b2];
+            
+            // 1. Generate the 8 possible codons
+            let possibleCodons = [];
+            for(let i of bases) {
+                for(let j of bases) {
+                    for(let k of bases) {
+                        possibleCodons.push(i + j + k);
+                    }
+                }
+            }
+
+            // 2. Map to amino acids and extract unique pool
+            const codonGrid = document.getElementById('codonGrid');
+            codonGrid.innerHTML = '';
+            let uniqueAAs = new Set();
+            
+            possibleCodons.forEach(codon => {
+                const aa = codonTable[codon];
+                if(aa !== '*') uniqueAAs.add(aa); // Exclude stop codons from pool
+                
+                const box = document.createElement('div');
+                box.className = 'codon-box';
+                box.innerHTML = `<strong>${codon}</strong><br>${aa}`;
+                codonGrid.appendChild(box);
+            });
+
+            currentAvailableAAs = Array.from(uniqueAAs);
+            document.getElementById('codon-section').style.display = 'block';
+
+            // 3. Generate Proteins for screen
+            const count = parseInt(document.getElementById('proteinCount').value);
+            const length = parseInt(document.getElementById('proteinLength').value);
+            const proteinList = document.getElementById('proteinList');
+            proteinList.innerHTML = '';
+
+            for(let i=0; i<count; i++) {
+                let seq = "";
+                for(let j=0; j<length; j++) {
+                    seq += currentAvailableAAs[Math.floor(Math.random() * currentAvailableAAs.length)];
+                }
+                proteinList.innerHTML += `>Sequence_${i+1}\n${seq}\n\n`;
+            }
+            document.getElementById('protein-section').style.display = 'block';
+
+            prepareFASTADownload(length);
+        }
+
+        function prepareFASTADownload(length) {
+            // Prevent infinite loop if combinations are smaller than 100
+            const maxCombos = Math.pow(currentAvailableAAs.length, length);
+            const targetProteins = Math.min(100, maxCombos);
+            
+            let uniqueProteins = new Set();
+            let attempts = 0;
+            const maxAttempts = 5000; // fail-safe
+
+            while(uniqueProteins.size < targetProteins && attempts < maxAttempts) {
+                let seq = "";
+                for(let j=0; j<length; j++) {
+                    seq += currentAvailableAAs[Math.floor(Math.random() * currentAvailableAAs.length)];
+                }
+                uniqueProteins.add(seq);
+                attempts++;
+            }
+
+            let fastaStr = "";
+            let idx = 1;
+            uniqueProteins.forEach(seq => {
+                fastaStr += `>Simulated_Protein_${idx}\n${seq}\n`;
+                idx++;
+            });
+
+            generatedFASTAData = fastaStr;
+        }
+
+        function downloadFASTA() {
+            if(!generatedFASTAData) {
+                alert("Please generate the simulation first!");
+                return;
+            }
+            const blob = new Blob([generatedFASTAData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'simulated_proteins.fasta';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
